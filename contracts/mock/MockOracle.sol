@@ -3,6 +3,12 @@ pragma solidity ^0.8.0;
 import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 
 contract MockOracle is AggregatorV3Interface {
+    uint price;
+
+    constructor(uint _price) {
+        price = _price;
+    }
+
     function decimals() external pure returns (uint8) {
         return 8;
     }
@@ -47,7 +53,7 @@ contract MockOracle is AggregatorV3Interface {
         )
     {
         roundId = 0;
-        answer = 3500 * 10 ** 8;
+        answer = int(price) * 10 ** 8;
         startedAt = 0;
         updatedAt = block.timestamp;
         answeredInRound = 0;
