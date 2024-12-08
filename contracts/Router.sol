@@ -20,7 +20,6 @@ contract Router is IRouter, Ownable {
     mapping(address => address[]) listCollateralAssets;
     mapping(address => mapping(address => mapping(address => uint256))) userDeposit;
     mapping(address => mapping(address => mapping(uint256 => uint256))) userBorrowed;
-    mapping(address => address) vaults;
     uint constant TEN_THOUSANDS = 10000;
     uint constant MAX_INT = type(uint).max;
 
