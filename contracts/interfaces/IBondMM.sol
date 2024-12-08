@@ -96,4 +96,8 @@ interface IBondMM {
         uint _amountOut,
         uint maturity
     ) external view returns (uint amountIn);
+
+    function pause() external;
+
+    function unpause() external;
 }

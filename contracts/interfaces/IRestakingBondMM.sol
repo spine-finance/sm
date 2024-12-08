@@ -100,4 +100,8 @@ interface IRestakingBondMM {
     ) external view returns (uint amountIn);
 
     function syncReward() external;
+
+    function pause() external;
+
+    function unpause() external;
 }

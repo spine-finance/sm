@@ -3,13 +3,15 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+
 import "./interfaces/IBondMM.sol";
 import "./interfaces/IBondToken.sol";
 import "./types/utils.sol";
 import "./interfaces/factories/IBondFactory.sol";
 import {UD60x18, ud} from "@prb/math/src/UD60x18.sol";
 
-contract BondMM is IBondMM, ERC20 {
+contract BondMM is IBondMM, ERC20, Pausable {
     IERC20 public quoteToken;
     IBondToken public bond;
     UD60x18 public r_star;
@@ -207,8 +209,9 @@ contract BondMM is IBondMM, ERC20 {
         quoteToken.transferFrom(msg.sender, address(this), cashIn);
     }
 
-    function addMaturity(uint256 _maturity) external onlyRouter {
+    function addMaturity(uint256 _maturity) external whenNotPaused onlyRouter {
         require(_maturity <= maxMaturity, "Invalid maturity");
+        require(!matureAt[_maturity], " Maturity already exists ");
         matureAt[_maturity] = true;
         listMaturity.push(_maturity);
         maturityNum += 1;
@@ -217,7 +220,7 @@ contract BondMM is IBondMM, ERC20 {
     function addLiquidity(
         address lp,
         uint256 cashIn
-    ) external onlyRouter returns (uint256 lpShares) {
+    ) external whenNotPaused onlyRouter returns (uint256 lpShares) {
         UD60x18 _X = X;
         uint256 y = quoteTokenAmount();
         uint256 E = getEquity();
@@ -291,7 +294,13 @@ contract BondMM is IBondMM, ERC20 {
         uint256 _amountIn,
         uint256 maturity,
         ACTION action
-    ) public onlyRouter ValidMaturity(maturity) returns (uint256 amountOut) {
+    )
+        public
+        whenNotPaused
+        onlyRouter
+        ValidMaturity(maturity)
+        returns (uint256 amountOut)
+    {
         bond.burn(account, maturity, _amountIn);
         PoolState memory poolState = _getCurrentPoolState(maturity);
         UD60x18 delta_x = ud(_amountIn);
@@ -316,7 +325,13 @@ contract BondMM is IBondMM, ERC20 {
         uint256 _amountOut,
         uint256 maturity,
         ACTION action
-    ) external onlyRouter ValidMaturity(maturity) returns (uint256 amountIn) {
+    )
+        external
+        whenNotPaused
+        onlyRouter
+        ValidMaturity(maturity)
+        returns (uint256 amountIn)
+    {
         PoolState memory poolState = _getCurrentPoolState(maturity);
         require(
             _amountOut < poolState.x.intoUint256(),
@@ -344,7 +359,13 @@ contract BondMM is IBondMM, ERC20 {
         uint256 _amountIn,
         uint256 maturity,
         ACTION action
-    ) public onlyRouter ValidMaturity(maturity) returns (uint256 amountOut) {
+    )
+        public
+        whenNotPaused
+        onlyRouter
+        ValidMaturity(maturity)
+        returns (uint256 amountOut)
+    {
         PoolState memory poolState = _getCurrentPoolState(maturity);
         uint256 fee = _getFee(maturity);
         uint256 swapFee = (_amountIn * fee) / TEN_THOUSANDS;
@@ -374,6 +395,7 @@ contract BondMM is IBondMM, ERC20 {
         ACTION action
     )
         external
+        whenNotPaused
         onlyRouter
         ValidMaturity(_fromMaturity)
         ValidMaturity(_toMaturity)
@@ -403,7 +425,7 @@ contract BondMM is IBondMM, ERC20 {
         address _receiver,
         uint _maturity,
         uint _amount
-    ) external onlyRouter {
+    ) external whenNotPaused onlyRouter {
         bond.mint(_receiver, _maturity, _amount);
     }
 
@@ -411,7 +433,7 @@ contract BondMM is IBondMM, ERC20 {
         address _from,
         uint _maturity,
         uint _amount
-    ) external onlyRouter {
+    ) external whenNotPaused onlyRouter {
         bond.burn(_from, _maturity, _amount);
     }
 
@@ -478,10 +500,6 @@ contract BondMM is IBondMM, ERC20 {
         return (((t.mul(r_star)).div(ud(ONE) + t.mul(k0))).exp()).inv();
     }
 
-    function _getMinEquityFrom(
-        uint256 maturity
-    ) internal view returns (uint256) {}
-
     function _updateX(
         UD60x18 y,
         UD60x18 deltaY,
@@ -511,5 +529,13 @@ contract BondMM is IBondMM, ERC20 {
         } else if (action == ACTION.CL) {
             loanData[maturity].l -= amount;
         }
+    }
+
+    function pause() external onlyRouter {
+        _pause();
+    }
+
+    function unpause() external onlyRouter {
+        _unpause();
     }
 }

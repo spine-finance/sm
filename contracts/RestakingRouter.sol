@@ -2,7 +2,7 @@
 pragma solidity ^0.8.19;
 
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/extensions/IERC20Metadata.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 import "@chainlink/contracts/src/v0.8/shared/interfaces/AggregatorV3Interface.sol";
 import "./interfaces/factories/IBondMMFactory.sol";
@@ -23,8 +23,7 @@ contract RestakingRouter is IRestakingRouter, Ownable {
     mapping(address => mapping(address => mapping(uint256 => uint256))) userBorrowed;
     mapping(address => address) vaults;
     uint constant TEN_THOUSANDS = 10000;
-    uint constant MAX_INT =
-        0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint constant MAX_INT = type(uint).max;
 
     IBondMMFactory immutable bondMMFactory;
     address immutable bondFactory;
@@ -112,7 +111,8 @@ contract RestakingRouter is IRestakingRouter, Ownable {
             _poolData.gracePeriod,
             _poolData.poolFee,
             collateralVault,
-            _poolData.stakingTokenAddress
+            _poolData.stakingTokenAddress,
+            _poolData.tokenPriceFeed
         );
         //
         emit PoolCreated(
@@ -195,7 +195,7 @@ contract RestakingRouter is IRestakingRouter, Ownable {
     function getBondPrice(
         address _poolAddress,
         uint256 _maturity
-    ) public view returns (uint256) {
+    ) external view returns (uint256) {
         return IRestakingBondMM(_poolAddress).getUintBondPrice(_maturity);
     }
 
@@ -289,6 +289,8 @@ contract RestakingRouter is IRestakingRouter, Ownable {
             _poolAddress
         ];
         address _borrowedToken = pools[_poolAddress].tokenAddress;
+        address _borrowedTokenPriceFeed = pools[_poolAddress].tokenPriceFeed;
+
         for (uint i = 0; i < _listCollateralAssets.length; i++) {
             uint _collateralTokenAmount = userDeposit[_borrower][_poolAddress][
                 _listCollateralAssets[i]
@@ -299,30 +301,32 @@ contract RestakingRouter is IRestakingRouter, Ownable {
                 collateralTokenInfo[_poolAddress][_listCollateralAssets[i]]
                     .priceFeed
             ).latestRoundData();
-            //
+
+            uint priceDecimals = AggregatorV3Interface(
+                collateralTokenInfo[_poolAddress][_listCollateralAssets[i]]
+                    .priceFeed
+            ).decimals();
+            uint tokenDecimals = IERC20Metadata(_listCollateralAssets[i])
+                .decimals();
             _cashAmount +=
+                //
                 (((uint256(_collateralTokenPrice) * _collateralTokenAmount) *
                     collateralTokenInfo[_poolAddress][_listCollateralAssets[i]]
                         .ltv) / TEN_THOUSANDS) /
-                10 **
-                    AggregatorV3Interface(
-                        collateralTokenInfo[_poolAddress][
-                            _listCollateralAssets[i]
-                        ].priceFeed
-                    ).decimals();
+                10 ** (tokenDecimals + priceDecimals);
         }
 
         (, int _borrowTokenPrice, , , ) = AggregatorV3Interface(
-            collateralTokenInfo[_poolAddress][_borrowedToken].priceFeed
+            _borrowedTokenPriceFeed
         ).latestRoundData();
         //
+        uint borrowedTokenPriceDecimals = AggregatorV3Interface(
+            _borrowedTokenPriceFeed
+        ).decimals();
+        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
         _maxAmount =
             (_cashAmount *
-                10 **
-                    AggregatorV3Interface(
-                        collateralTokenInfo[_poolAddress][_borrowedToken]
-                            .priceFeed
-                    ).decimals()) /
+                10 ** (borrowedTokenPriceDecimals + borrowedTokenDecimals)) /
             uint(_borrowTokenPrice);
     }
 
@@ -335,6 +339,8 @@ contract RestakingRouter is IRestakingRouter, Ownable {
             _poolAddress
         ];
         address _borrowedToken = pools[_poolAddress].tokenAddress;
+        address _borrowedTokenPriceFeed = pools[_poolAddress].tokenPriceFeed;
+
         for (uint i = 0; i < _listCollateralAssets.length; i++) {
             uint _collateralTokenAmount = userDeposit[_borrower][_poolAddress][
                 _listCollateralAssets[i]
@@ -346,27 +352,83 @@ contract RestakingRouter is IRestakingRouter, Ownable {
                     .priceFeed
             ).latestRoundData();
             //
+            uint priceDecimals = AggregatorV3Interface(
+                collateralTokenInfo[_poolAddress][_listCollateralAssets[i]]
+                    .priceFeed
+            ).decimals();
+            uint tokenDecimals = IERC20Metadata(_listCollateralAssets[i])
+                .decimals();
             _cashAmount +=
                 (uint256(_collateralTokenPrice) * _collateralTokenAmount) /
-                10 **
-                    AggregatorV3Interface(
-                        collateralTokenInfo[_poolAddress][
-                            _listCollateralAssets[i]
-                        ].priceFeed
-                    ).decimals();
+                10 ** (tokenDecimals + priceDecimals);
         }
 
         (, int _borrowTokenPrice, , , ) = AggregatorV3Interface(
-            collateralTokenInfo[_poolAddress][_borrowedToken].priceFeed
+            _borrowedTokenPriceFeed
         ).latestRoundData();
+        //
+        uint borrowedTokenPriceDecimals = AggregatorV3Interface(
+            _borrowedTokenPriceFeed
+        ).decimals();
+        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
+        _maxAmount =
+            (_cashAmount *
+                10 ** (borrowedTokenDecimals + borrowedTokenPriceDecimals)) /
+            uint(_borrowTokenPrice);
+    }
+
+    function _calcLiquidationPoint(
+        address _borrower,
+        address _poolAddress
+    ) internal view returns (uint256 _maxAmount) {
+        uint _cashAmount = 0;
+        address[] memory _listCollateralAssets = listCollateralAssets[
+            _poolAddress
+        ];
+        address _borrowedToken = pools[_poolAddress].tokenAddress;
+        address _borrowedTokenPriceFeed = pools[_poolAddress].tokenPriceFeed;
+
+        for (uint i = 0; i < _listCollateralAssets.length; i++) {
+            uint _collateralTokenAmount = userDeposit[_borrower][_poolAddress][
+                _listCollateralAssets[i]
+            ];
+            if (_collateralTokenAmount == 0) continue;
+            // calc collateral usd amount
+            (, int _collateralTokenPrice, , , ) = AggregatorV3Interface(
+                collateralTokenInfo[_poolAddress][_listCollateralAssets[i]]
+                    .priceFeed
+            ).latestRoundData();
+
+            uint priceDecimals = AggregatorV3Interface(
+                collateralTokenInfo[_poolAddress][_listCollateralAssets[i]]
+                    .priceFeed
+            ).decimals();
+            uint tokenDecimals = IERC20Metadata(_listCollateralAssets[i])
+                .decimals();
+            //
+            _cashAmount +=
+                (
+                    (((uint256(_collateralTokenPrice) *
+                        _collateralTokenAmount) * TEN_THOUSANDS) /
+                        collateralTokenInfo[_poolAddress][
+                            _listCollateralAssets[i]
+                        ].liquidationRatio)
+                ) /
+                10 ** (tokenDecimals + priceDecimals);
+        }
+
+        (, int _borrowTokenPrice, , , ) = AggregatorV3Interface(
+            _borrowedTokenPriceFeed
+        ).latestRoundData();
+        //
+        uint borrowedTokenPriceDecimals = AggregatorV3Interface(
+            _borrowedTokenPriceFeed
+        ).decimals();
+        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
         //
         _maxAmount =
             (_cashAmount *
-                10 **
-                    AggregatorV3Interface(
-                        collateralTokenInfo[_poolAddress][_borrowedToken]
-                            .priceFeed
-                    ).decimals()) /
+                10 ** (borrowedTokenDecimals + borrowedTokenPriceDecimals)) /
             uint(_borrowTokenPrice);
     }
 
@@ -525,56 +587,6 @@ contract RestakingRouter is IRestakingRouter, Ownable {
 
         pools[_poolAddress].lpDepositAmount -= amountOut;
         emit LiquidityRemoved(msg.sender, _poolAddress, amountOut, _shares);
-    }
-
-    function _calcLiquidationPoint(
-        address _borrower,
-        address _poolAddress
-    ) internal view returns (uint256 _maxAmount) {
-        uint _cashAmount = 0;
-        address[] memory _listCollateralAssets = listCollateralAssets[
-            _poolAddress
-        ];
-        address _borrowedToken = pools[_poolAddress].tokenAddress;
-        for (uint i = 0; i < _listCollateralAssets.length; i++) {
-            uint _collateralTokenAmount = userDeposit[_borrower][_poolAddress][
-                _listCollateralAssets[i]
-            ];
-            if (_collateralTokenAmount == 0) continue;
-            // calc collateral usd amount
-            (, int _collateralTokenPrice, , , ) = AggregatorV3Interface(
-                collateralTokenInfo[_poolAddress][_listCollateralAssets[i]]
-                    .priceFeed
-            ).latestRoundData();
-            //
-            _cashAmount +=
-                (
-                    (((uint256(_collateralTokenPrice) *
-                        _collateralTokenAmount) * TEN_THOUSANDS) /
-                        collateralTokenInfo[_poolAddress][
-                            _listCollateralAssets[i]
-                        ].liquidationRatio)
-                ) /
-                10 **
-                    AggregatorV3Interface(
-                        collateralTokenInfo[_poolAddress][
-                            _listCollateralAssets[i]
-                        ].priceFeed
-                    ).decimals();
-        }
-
-        (, int _borrowTokenPrice, , , ) = AggregatorV3Interface(
-            collateralTokenInfo[_poolAddress][_borrowedToken].priceFeed
-        ).latestRoundData();
-        //
-        _maxAmount =
-            (_cashAmount *
-                10 **
-                    AggregatorV3Interface(
-                        collateralTokenInfo[_poolAddress][_borrowedToken]
-                            .priceFeed
-                    ).decimals()) /
-            uint(_borrowTokenPrice);
     }
 
     function isLiquidatable(
@@ -845,22 +857,6 @@ contract RestakingRouter is IRestakingRouter, Ownable {
             _bondAmount
         );
     }
-
-    // use ratio.
-    // function _openLendingPosition(
-    //     address _lender,
-    //     address _poolAddress,
-    //     uint _bondAmount,
-    //     uint _maturity
-    // ) internal returns (uint tokenAmountIn) {
-    //     tokenAmountIn = IRestakingBondMM(_poolAddress)
-    //         .swapQuoteTokenForExactBond(
-    //             _lender,
-    //             _bondAmount,
-    //             _maturity,
-    //             ACTION.OL
-    //         );
-    // }
 
     function _openLendingPositionWithQuoteToken(
         address _lender,

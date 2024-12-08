@@ -6,8 +6,7 @@ import "../interfaces/ICollateralVault.sol";
 
 contract CollateralVault is ICollateralVault {
     address immutable router;
-    uint constant MAX_INT =
-        0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff;
+    uint constant MAX_INT = type(uint).max;
 
     constructor(address _router) {
         router = _router;

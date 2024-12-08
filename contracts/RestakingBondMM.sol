@@ -3,13 +3,15 @@ pragma solidity ^0.8.19;
 import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
+
 import "./interfaces/IBondMM.sol";
 import "./interfaces/IBondToken.sol";
 import "./types/utils.sol";
 import "./interfaces/factories/IBondFactory.sol";
 import {UD60x18, ud} from "@prb/math/src/UD60x18.sol";
 
-contract RestakingBondMM is IBondMM, ERC20 {
+contract RestakingBondMM is IBondMM, ERC20, Pausable {
     IERC20 public quoteToken;
     IBondToken public bond;
     UD60x18 public r_star;
@@ -205,6 +207,8 @@ contract RestakingBondMM is IBondMM, ERC20 {
 
     function addMaturity(uint256 _maturity) external onlyRouter {
         require(_maturity <= maxMaturity, "Invalid maturity");
+        require(!matureAt[_maturity], " Maturity already exists ");
+
         matureAt[_maturity] = true;
         listMaturity.push(_maturity);
         maturityNum += 1;
@@ -284,6 +288,7 @@ contract RestakingBondMM is IBondMM, ERC20 {
         X = (_X * ud(y + cashIn)) / ud(y);
         y += cashIn;
         loanData[maturity].b -= cashIn;
+        quoteToken.transferFrom(account, address(this), cashIn);
     }
 
     function swapBondForQuoteToken(
@@ -474,10 +479,6 @@ contract RestakingBondMM is IBondMM, ERC20 {
         return (((t.mul(r_star)).div(ud(ONE) + t.mul(k0))).exp()).inv();
     }
 
-    function _getMinEquityFrom(
-        uint256 maturity
-    ) internal view returns (uint256) {}
-
     function _updateXY(
         UD60x18 _y,
         UD60x18 deltaY,
@@ -508,5 +509,13 @@ contract RestakingBondMM is IBondMM, ERC20 {
         } else if (action == ACTION.CL) {
             loanData[maturity].l -= amount;
         }
+    }
+
+    function pause() external onlyRouter {
+        _pause();
+    }
+
+    function unpause() external onlyRouter {
+        _unpause();
     }
 }

@@ -26,6 +26,7 @@ struct PoolData {
     Fee poolFee;
     address collateralVault;
     address stakingTokenAddress;
+    address tokenPriceFeed;
 }
 
 struct InitPoolData {
@@ -37,6 +38,7 @@ struct InitPoolData {
     uint256 maxMaturity;
     address tokenAddress;
     address stakingTokenAddress;
+    address tokenPriceFeed;
 }
 
 struct BorrowData {
