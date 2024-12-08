@@ -106,10 +106,6 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         return ud(maturity - time).div(ud(YEAR_SECONDS));
     }
 
-    function changeRStar(uint256 _r_star) external onlyRouter {
-        r_star = ud(_r_star);
-    }
-
     // r = k ln (X/y) + r*
     function getRate() private view returns (uint256, UD60x18) {
         UD60x18 _y = ud(y);
@@ -205,16 +201,15 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         _mint(_creator, initLPShares);
     }
 
-    function addMaturity(uint256 _maturity) external onlyRouter {
+    function addMaturity(uint256 _maturity) external whenNotPaused onlyRouter {
         require(_maturity <= maxMaturity, "Invalid maturity");
         require(!matureAt[_maturity], " Maturity already exists ");
-
         matureAt[_maturity] = true;
         listMaturity.push(_maturity);
         maturityNum += 1;
     }
 
-    function syncReward() public onlyRouter {
+    function syncReward() public whenNotPaused onlyRouter {
         uint256 y_new = IERC20(quoteToken).balanceOf(address(this));
         UD60x18 _X = X;
         X = (_X * ud(y_new)) / ud(y);
@@ -224,7 +219,7 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
     function addLiquidity(
         address lp,
         uint256 cashIn
-    ) external onlyRouter returns (uint256 lpShares) {
+    ) external whenNotPaused onlyRouter returns (uint256 lpShares) {
         UD60x18 _X = X;
         uint256 E = getEquity();
 
@@ -296,7 +291,13 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         uint256 _amountIn,
         uint256 maturity,
         ACTION action
-    ) public onlyRouter ValidMaturity(maturity) returns (uint256 amountOut) {
+    )
+        public
+        whenNotPaused
+        onlyRouter
+        ValidMaturity(maturity)
+        returns (uint256 amountOut)
+    {
         bond.burn(account, maturity, _amountIn);
         PoolState memory poolState = _getCurrentPoolState(maturity);
         UD60x18 delta_x = ud(_amountIn);
@@ -322,7 +323,13 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         uint256 _amountOut,
         uint256 maturity,
         ACTION action
-    ) external onlyRouter ValidMaturity(maturity) returns (uint256 amountIn) {
+    )
+        external
+        whenNotPaused
+        onlyRouter
+        ValidMaturity(maturity)
+        returns (uint256 amountIn)
+    {
         PoolState memory poolState = _getCurrentPoolState(maturity);
         require(
             _amountOut < poolState.x.intoUint256(),
@@ -348,7 +355,13 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         uint256 _amountIn,
         uint256 maturity,
         ACTION action
-    ) public onlyRouter ValidMaturity(maturity) returns (uint256 amountOut) {
+    )
+        public
+        whenNotPaused
+        onlyRouter
+        ValidMaturity(maturity)
+        returns (uint256 amountOut)
+    {
         PoolState memory poolState = _getCurrentPoolState(maturity);
         uint256 fee = _getFee(maturity);
         uint256 swapFee = (_amountIn * fee) / TEN_THOUSANDS;
@@ -376,6 +389,7 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         ACTION action
     )
         external
+        whenNotPaused
         onlyRouter
         ValidMaturity(_fromMaturity)
         ValidMaturity(_toMaturity)
@@ -405,7 +419,7 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         address _receiver,
         uint _maturity,
         uint _amount
-    ) external onlyRouter {
+    ) external whenNotPaused onlyRouter {
         bond.mint(_receiver, _maturity, _amount);
     }
 
@@ -413,7 +427,7 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         address _from,
         uint _maturity,
         uint _amount
-    ) external onlyRouter {
+    ) external whenNotPaused onlyRouter {
         bond.burn(_from, _maturity, _amount);
     }
 
