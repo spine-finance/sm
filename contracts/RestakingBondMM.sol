@@ -209,7 +209,7 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         maturityNum += 1;
     }
 
-    function syncReward() public whenNotPaused onlyRouter {
+    function syncReward() public onlyRouter {
         uint256 y_new = IERC20(quoteToken).balanceOf(address(this));
         UD60x18 _X = X;
         X = (_X * ud(y_new)) / ud(y);
@@ -267,7 +267,6 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         X = (_X * ud(y - cashOut)) / ud(y);
         y -= cashOut;
         loanData[maturity].l -= cashOut;
-        quoteToken.transfer(router, cashOut);
     }
 
     function repay(
@@ -283,7 +282,6 @@ contract RestakingBondMM is IBondMM, ERC20, Pausable {
         X = (_X * ud(y + cashIn)) / ud(y);
         y += cashIn;
         loanData[maturity].b -= cashIn;
-        quoteToken.transferFrom(account, address(this), cashIn);
     }
 
     function swapBondForQuoteToken(

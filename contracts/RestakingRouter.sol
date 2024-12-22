@@ -290,6 +290,8 @@ contract RestakingRouter is IRestakingRouter, Ownable {
         address _borrowedToken = pools[_poolAddress].tokenAddress;
         address _borrowedTokenPriceFeed = pools[_poolAddress].tokenPriceFeed;
 
+        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
+
         for (uint i = 0; i < _listCollateralAssets.length; i++) {
             uint _collateralTokenAmount = userDeposit[_borrower][_poolAddress][
                 _listCollateralAssets[i]
@@ -309,9 +311,10 @@ contract RestakingRouter is IRestakingRouter, Ownable {
                 .decimals();
             _cashAmount +=
                 //
-                (((uint256(_collateralTokenPrice) * _collateralTokenAmount) *
+                ((((uint256(_collateralTokenPrice) * _collateralTokenAmount) *
                     collateralTokenInfo[_poolAddress][_listCollateralAssets[i]]
-                        .ltv) / TEN_THOUSANDS) /
+                        .ltv) / TEN_THOUSANDS) *
+                    10 ** (borrowedTokenDecimals)) /
                 10 ** (tokenDecimals + priceDecimals);
         }
 
@@ -322,10 +325,8 @@ contract RestakingRouter is IRestakingRouter, Ownable {
         uint borrowedTokenPriceDecimals = AggregatorV3Interface(
             _borrowedTokenPriceFeed
         ).decimals();
-        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
         _maxAmount =
-            (_cashAmount *
-                10 ** (borrowedTokenPriceDecimals + borrowedTokenDecimals)) /
+            (_cashAmount * 10 ** (borrowedTokenPriceDecimals)) /
             uint(_borrowTokenPrice);
     }
 
@@ -339,6 +340,7 @@ contract RestakingRouter is IRestakingRouter, Ownable {
         ];
         address _borrowedToken = pools[_poolAddress].tokenAddress;
         address _borrowedTokenPriceFeed = pools[_poolAddress].tokenPriceFeed;
+        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
 
         for (uint i = 0; i < _listCollateralAssets.length; i++) {
             uint _collateralTokenAmount = userDeposit[_borrower][_poolAddress][
@@ -358,7 +360,8 @@ contract RestakingRouter is IRestakingRouter, Ownable {
             uint tokenDecimals = IERC20Metadata(_listCollateralAssets[i])
                 .decimals();
             _cashAmount +=
-                (uint256(_collateralTokenPrice) * _collateralTokenAmount) /
+                ((uint256(_collateralTokenPrice) * _collateralTokenAmount) *
+                    10 ** borrowedTokenDecimals) /
                 10 ** (tokenDecimals + priceDecimals);
         }
 
@@ -369,10 +372,8 @@ contract RestakingRouter is IRestakingRouter, Ownable {
         uint borrowedTokenPriceDecimals = AggregatorV3Interface(
             _borrowedTokenPriceFeed
         ).decimals();
-        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
         _maxAmount =
-            (_cashAmount *
-                10 ** (borrowedTokenDecimals + borrowedTokenPriceDecimals)) /
+            (_cashAmount * 10 ** (borrowedTokenPriceDecimals)) /
             uint(_borrowTokenPrice);
     }
 
@@ -386,6 +387,7 @@ contract RestakingRouter is IRestakingRouter, Ownable {
         ];
         address _borrowedToken = pools[_poolAddress].tokenAddress;
         address _borrowedTokenPriceFeed = pools[_poolAddress].tokenPriceFeed;
+        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
 
         for (uint i = 0; i < _listCollateralAssets.length; i++) {
             uint _collateralTokenAmount = userDeposit[_borrower][_poolAddress][
@@ -406,13 +408,13 @@ contract RestakingRouter is IRestakingRouter, Ownable {
                 .decimals();
             //
             _cashAmount +=
-                (
+                ((
                     (((uint256(_collateralTokenPrice) *
                         _collateralTokenAmount) * TEN_THOUSANDS) /
                         collateralTokenInfo[_poolAddress][
                             _listCollateralAssets[i]
                         ].liquidationRatio)
-                ) /
+                ) * 10 ** borrowedTokenDecimals) /
                 10 ** (tokenDecimals + priceDecimals);
         }
 
@@ -423,11 +425,9 @@ contract RestakingRouter is IRestakingRouter, Ownable {
         uint borrowedTokenPriceDecimals = AggregatorV3Interface(
             _borrowedTokenPriceFeed
         ).decimals();
-        uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
         //
         _maxAmount =
-            (_cashAmount *
-                10 ** (borrowedTokenDecimals + borrowedTokenPriceDecimals)) /
+            (_cashAmount * 10 ** (borrowedTokenPriceDecimals)) /
             uint(_borrowTokenPrice);
     }
 
