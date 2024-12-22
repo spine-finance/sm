@@ -288,7 +288,6 @@ contract RestakingRouter is IRestakingRouter, Ownable {
             _poolAddress
         ];
         address _borrowedToken = pools[_poolAddress].tokenAddress;
-        address _borrowedTokenPriceFeed = pools[_poolAddress].tokenPriceFeed;
 
         uint borrowedTokenDecimals = IERC20Metadata(_borrowedToken).decimals();
 
@@ -317,6 +316,7 @@ contract RestakingRouter is IRestakingRouter, Ownable {
                     10 ** (borrowedTokenDecimals)) /
                 10 ** (tokenDecimals + priceDecimals);
         }
+        address _borrowedTokenPriceFeed = pools[_poolAddress].tokenPriceFeed;
 
         (, int _borrowTokenPrice, , , ) = AggregatorV3Interface(
             _borrowedTokenPriceFeed
