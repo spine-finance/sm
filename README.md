@@ -11,3 +11,5 @@ REPORT_GAS=true npx hardhat test
 npx hardhat node
 npx hardhat ignition deploy ./ignition/modules/Lock.js
 ```
+
+For more detail about Spine protocol, please go to: [Spine docs](https://spine-protocol.gitbook.io/spine-finance)
